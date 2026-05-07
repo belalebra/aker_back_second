@@ -3,8 +3,9 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
 
 DB_CONFIG = {
-    "DRIVER": "{ODBC Driver 17 for SQL Server}",
-    "SERVER": ".\\SQLEXPRESS",
-    "DATABASE": "akar_server_compound",
-    "Trusted_Connection": "yes",
+    "DATABASE": "akar_server",
+    "USER":     "postgres",
+    "PASSWORD": "123456789",
+    "HOST":     "localhost",
+    "PORT":     "5432",
 }
