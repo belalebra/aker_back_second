@@ -1,8 +1,0 @@
-fastapi
-uvicorn
-psycopg2-binary
-python-dotenv
-pyjwt
-passlib[bcrypt]
-pydantic[email]
-python-multipart
