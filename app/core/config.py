@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()  # 👈 يحمل .env محليًا
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
@@ -11,5 +14,3 @@ DB_CONFIG = {
     "HOST": os.getenv("DB_HOST"),
     "PORT": os.getenv("DB_PORT"),
 }
-
-
