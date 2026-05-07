@@ -1,11 +1,15 @@
-SECRET_KEY = "aK@r#2024$Secure!Key^Backend&Smart*Compound%Safe"
+import os
+
+SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
 
 DB_CONFIG = {
-    "DATABASE": "postgres",
-    "USER": "postgres.uczoypixorcbcrryuien",
-    "PASSWORD": "Belal123411810",
-    "HOST": "aws-1-ap-northeast-2.pooler.supabase.com",
-    "PORT": "5432",
+    "DATABASE": os.getenv("DB_NAME"),
+    "USER": os.getenv("DB_USER"),
+    "PASSWORD": os.getenv("DB_PASSWORD"),
+    "HOST": os.getenv("DB_HOST"),
+    "PORT": os.getenv("DB_PORT"),
 }
+
+
