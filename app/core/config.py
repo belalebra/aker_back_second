@@ -3,9 +3,9 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
 
 DB_CONFIG = {
-    "DATABASE": "akar_server",
-    "USER":     "postgres",
-    "PASSWORD": "123456789",
-    "HOST":     "localhost",
-    "PORT":     "5432",
+    "DATABASE": "postgres",
+    "USER": "postgres.uczoypixorcbcrryuien",
+    "PASSWORD": "Belal123411810",
+    "HOST": "aws-1-ap-northeast-2.pooler.supabase.com",
+    "PORT": "5432",
 }
