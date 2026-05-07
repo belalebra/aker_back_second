@@ -1,5 +1,5 @@
 import logging
-from pyodbc import Connection
+from psycopg2.extensions import connection as Connection
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
@@ -9,10 +9,10 @@ logger = logging.getLogger(__name__)
 def get_payment_methods(conn: Connection):
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT payment_method_id, method_name FROM Payment_method ORDER BY payment_method_id")
+        cursor.execute("SELECT payment_method_id, method_name FROM payment_method ORDER BY payment_method_id")
         rows = cursor.fetchall()
         return [
-            {"payment_method_id": r.payment_method_id, "method_name": r.method_name}
+            {"payment_method_id": r[0], "method_name": r[1]}
             for r in rows
         ]
     except Exception as e:
@@ -35,25 +35,25 @@ def get_my_bills(conn: Connection, resident_id: int):
                 e.f_name AS emp_f_name,
                 e.l_name AS emp_l_name,
                 e.job_type
-            FROM Maintance_bill mb
-            LEFT JOIN Booking b       ON b.booking_id = mb.booking_id
-            LEFT JOIN Payment_method pm ON pm.payment_method_id = mb.payment_method_id
-            LEFT JOIN Maintenance_employee e ON e.employee_id = b.employee_id
-            WHERE b.resident_id = ?
+            FROM maintance_bill mb
+            LEFT JOIN booking b       ON b.booking_id = mb.booking_id
+            LEFT JOIN payment_method pm ON pm.payment_method_id = mb.payment_method_id
+            LEFT JOIN maintenance_employee e ON e.employee_id = b.employee_id
+            WHERE b.resident_id = %s
             ORDER BY mb.bill_id DESC
-        """, resident_id)
+        """, (resident_id,))
         rows = cursor.fetchall()
 
         return [
             {
-                "bill_id":        r.bill_id,
-                "amount":         float(r.amount) if r.amount else None,
-                "status":         r.status,
-                "created_at":     str(r.created_at) if r.created_at else None,
-                "due_date":       str(r.due_date) if r.due_date else None,
-                "payment_method": r.payment_method,
-                "employee":       f"{r.emp_f_name} {r.emp_l_name}" if r.emp_f_name else None,
-                "service_type":   r.job_type,
+                "bill_id":        r[0],
+                "amount":         float(r[1]) if r[1] else None,
+                "status":         r[2],
+                "created_at":     str(r[3]) if r[3] else None,
+                "due_date":       str(r[4]) if r[4] else None,
+                "payment_method": r[5],
+                "employee":       f"{r[6]} {r[7]}" if r[6] else None,
+                "service_type":   r[8],
             }
             for r in rows
         ]
@@ -70,30 +70,30 @@ def pay_bill(conn: Connection, resident_id: int, bill_id: int, payment_method_id
         # Validate bill belongs to this resident
         cursor.execute("""
             SELECT mb.bill_id, mb.status
-            FROM Maintance_bill mb
-            JOIN Booking b ON b.booking_id = mb.booking_id
-            WHERE mb.bill_id = ? AND b.resident_id = ?
-        """, bill_id, resident_id)
+            FROM maintance_bill mb
+            JOIN booking b ON b.booking_id = mb.booking_id
+            WHERE mb.bill_id = %s AND b.resident_id = %s
+        """, (bill_id, resident_id))
         bill = cursor.fetchone()
 
         if not bill:
             raise HTTPException(status_code=404, detail="Bill not found or not yours")
-        if bill.status == "paid":
+        if bill[1] == "paid":
             raise HTTPException(status_code=400, detail="Bill already paid")
 
         # Validate payment method
         cursor.execute(
-            "SELECT payment_method_id FROM Payment_method WHERE payment_method_id = ?",
-            payment_method_id
+            "SELECT payment_method_id FROM payment_method WHERE payment_method_id = %s",
+            (payment_method_id,)
         )
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Payment method not found")
 
         cursor.execute("""
-            UPDATE Maintance_bill
-            SET status = 'paid', payment_method_id = ?
-            WHERE bill_id = ?
-        """, payment_method_id, bill_id)
+            UPDATE maintance_bill
+            SET status = 'paid', payment_method_id = %s
+            WHERE bill_id = %s
+        """, (payment_method_id, bill_id))
         conn.commit()
 
         logger.info(f"Bill {bill_id} paid by resident {resident_id}")

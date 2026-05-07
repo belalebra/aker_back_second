@@ -43,8 +43,8 @@ def get_resident_id(conn, username: str) -> int:
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     cursor = conn.cursor()
-    cursor.execute("SELECT resident_id FROM Resident WHERE email = ?", user.email)
+    cursor.execute("SELECT resident_id FROM Resident WHERE email = %s", (user[4],))
     resident = cursor.fetchone()
     if not resident:
         raise HTTPException(status_code=404, detail="Resident profile not found")
-    return resident.resident_id
+    return resident[0]

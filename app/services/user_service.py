@@ -1,5 +1,4 @@
 import logging
-from pyodbc import Connection
 from fastapi import HTTPException
 from passlib.context import CryptContext
 
@@ -7,35 +6,24 @@ logger = logging.getLogger(__name__)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-# ── Get All Users (Admin) ─────────────────────────────────────
-def get_all_users(conn: Connection):
+def get_all_users(conn):
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT
-                l.username, l.email, l.user_role, l.phone,
-                r.f_name, r.l_name,
-                r.resident_phone_num AS resident_phone,
-                r.area, r.apartment_number, r.unit_number,
-                r.joining_date, r.total_requests
-            FROM Login l
-            LEFT JOIN Resident r ON r.email = l.email
+            SELECT l.username, l.email, l.user_role, l.phone,
+                   r.f_name, r.l_name, r.area, r.apartment_number,
+                   r.unit_number, r.joining_date, r.total_requests
+            FROM login l
+            LEFT JOIN resident r ON r.email = l.email
             ORDER BY l.username
         """)
         rows = cursor.fetchall()
         return [
             {
-                "username":         r.username,
-                "email":            r.email,
-                "role":             r.user_role,
-                "phone":            r.phone,
-                "f_name":           r.f_name,
-                "l_name":           r.l_name,
-                "area":             r.area,
-                "apartment_number": r.apartment_number,
-                "unit_number":      r.unit_number,
-                "joining_date":     str(r.joining_date) if r.joining_date else None,
-                "total_requests":   r.total_requests,
+                "username": r[0], "email": r[1], "role": r[2], "phone": r[3],
+                "f_name": r[4], "l_name": r[5], "area": r[6],
+                "apartment_number": r[7], "unit_number": r[8],
+                "joining_date": str(r[9]) if r[9] else None, "total_requests": r[10],
             }
             for r in rows
         ]
@@ -44,56 +32,34 @@ def get_all_users(conn: Connection):
         raise HTTPException(status_code=500, detail="Failed to fetch users")
 
 
-# ── Update My Profile ─────────────────────────────────────────
-def update_my_profile(conn: Connection, username: str, data: dict):
+def update_my_profile(conn, username: str, data: dict):
     try:
         cursor = conn.cursor()
-
-        # Update Login table
         if data.get("phone"):
-            cursor.execute(
-                "UPDATE Login SET phone = ? WHERE username = ?",
-                data["phone"], username
-            )
-
-        # Update password if provided
+            cursor.execute("UPDATE login SET phone = %s WHERE username = %s", (data["phone"], username))
         if data.get("new_password"):
             hashed = pwd_context.hash(data["new_password"])
-            cursor.execute(
-                "UPDATE Login SET user_password = ? WHERE username = ?",
-                hashed, username
-            )
-
-        # Update Resident table
-        cursor.execute("SELECT email FROM Login WHERE username = ?", username)
+            cursor.execute("UPDATE login SET user_password = %s WHERE username = %s", (hashed, username))
+        cursor.execute("SELECT email FROM login WHERE username = %s", (username,))
         user = cursor.fetchone()
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-
         update_fields = []
         update_values = []
-
         if data.get("f_name"):
-            update_fields.append("f_name = ?")
+            update_fields.append("f_name = %s")
             update_values.append(data["f_name"])
         if data.get("l_name"):
-            update_fields.append("l_name = ?")
+            update_fields.append("l_name = %s")
             update_values.append(data["l_name"])
         if data.get("phone"):
-            update_fields.append("resident_phone_num = ?")
+            update_fields.append("resident_phone_num = %s")
             update_values.append(data["phone"])
-
         if update_fields:
-            update_values.append(user.email)
-            cursor.execute(
-                f"UPDATE Resident SET {', '.join(update_fields)} WHERE email = ?",
-                *update_values
-            )
-
+            update_values.append(user[0])
+            cursor.execute(f"UPDATE resident SET {', '.join(update_fields)} WHERE email = %s", tuple(update_values))
         conn.commit()
-        logger.info(f"Profile updated for: {username}")
         return {"success": True, "message": "Profile updated successfully"}
-
     except HTTPException:
         raise
     except Exception as e:
@@ -101,30 +67,18 @@ def update_my_profile(conn: Connection, username: str, data: dict):
         raise HTTPException(status_code=500, detail="Failed to update profile")
 
 
-# ── Update User Role (Admin) ──────────────────────────────────
-def update_user_role(conn: Connection, username: str, role: str):
+def update_user_role(conn, username: str, role: str):
     try:
         valid_roles = ["resident", "employee", "admin"]
         if role not in valid_roles:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid role. Must be one of: {', '.join(valid_roles)}"
-            )
-
+            raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {', '.join(valid_roles)}")
         cursor = conn.cursor()
-        cursor.execute("SELECT username FROM Login WHERE username = ?", username)
+        cursor.execute("SELECT username FROM login WHERE username = %s", (username,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="User not found")
-
-        cursor.execute(
-            "UPDATE Login SET user_role = ? WHERE username = ?",
-            role, username
-        )
+        cursor.execute("UPDATE login SET user_role = %s WHERE username = %s", (role, username))
         conn.commit()
-
-        logger.info(f"Role updated for {username} to {role}")
         return {"success": True, "message": f"User role updated to '{role}'"}
-
     except HTTPException:
         raise
     except Exception as e:

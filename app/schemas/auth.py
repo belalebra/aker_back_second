@@ -43,3 +43,15 @@ class ProfileResponse(BaseModel):
     username: str
     email: str
     role: str
+
+class ResetRequestSchema(BaseModel):
+    email: EmailStr
+    phone: str
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, v):
+        # التحقق إن الرقم مصري زي ما إنت عامل في الـ Register بالظبط
+        if not re.match(r"^\+?2?01[0125]\d{8}$", v):
+            raise ValueError("Invalid Egyptian phone number")
+        return v

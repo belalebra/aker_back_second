@@ -1,73 +1,59 @@
 import logging
-from pyodbc import Connection
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 
 
-# ── Get All Services ──────────────────────────────────────────
-def get_all_services(conn: Connection):
+# ── Services ──────────────────────────────────────────────────
+def get_all_services(conn):
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT major_id, major_name FROM Maintenance_Major ORDER BY major_id")
+        cursor.execute("SELECT major_id, major_name FROM maintenance_major ORDER BY major_id")
         rows = cursor.fetchall()
-        return [{"major_id": r.major_id, "major_name": r.major_name} for r in rows]
+        return [{"major_id": r[0], "major_name": r[1]} for r in rows]
     except Exception as e:
         logger.error(f"get_all_services error: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch services")
 
-
-# ── Get Service By ID ─────────────────────────────────────────
-def get_service_by_id(conn: Connection, service_id: int):
+def get_service_by_id(conn, service_id: int):
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT major_id, major_name FROM Maintenance_Major WHERE major_id = ?", service_id)
+        cursor.execute("SELECT major_id, major_name FROM maintenance_major WHERE major_id = %s", (service_id,))
         row = cursor.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Service not found")
-        return {"major_id": row.major_id, "major_name": row.major_name}
+        return {"major_id": row[0], "major_name": row[1]}
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"get_service_by_id error: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch service")
 
-
-# ── Add Service (Admin) ───────────────────────────────────────
-def add_service(conn: Connection, major_name: str):
+def add_service(conn, major_name: str):
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT major_id FROM Maintenance_Major WHERE LOWER(major_name) = LOWER(?)", major_name)
+        cursor.execute("SELECT major_id FROM maintenance_major WHERE LOWER(major_name) = LOWER(%s)", (major_name,))
         if cursor.fetchone():
             raise HTTPException(status_code=400, detail="Service already exists")
-
-        cursor.execute("INSERT INTO Maintenance_Major (major_name) VALUES (?)", major_name)
+        cursor.execute("INSERT INTO maintenance_major (major_name) VALUES (%s)", (major_name,))
         conn.commit()
-
-        cursor.execute("SELECT TOP 1 major_id FROM Maintenance_Major ORDER BY major_id DESC")
+        cursor.execute("SELECT major_id FROM maintenance_major ORDER BY major_id DESC LIMIT 1")
         new_service = cursor.fetchone()
-
-        logger.info(f"Service added: {major_name}")
-        return {"success": True, "message": "Service added successfully", "major_id": new_service.major_id}
+        return {"success": True, "message": "Service added successfully", "major_id": new_service[0]}
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"add_service error: {e}")
         raise HTTPException(status_code=500, detail="Failed to add service")
 
-
-# ── Update Service (Admin) ────────────────────────────────────
-def update_service(conn: Connection, service_id: int, major_name: str):
+def update_service(conn, service_id: int, major_name: str):
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT major_id FROM Maintenance_Major WHERE major_id = ?", service_id)
+        cursor.execute("SELECT major_id FROM maintenance_major WHERE major_id = %s", (service_id,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Service not found")
-
-        cursor.execute("UPDATE Maintenance_Major SET major_name = ? WHERE major_id = ?", major_name, service_id)
+        cursor.execute("UPDATE maintenance_major SET major_name = %s WHERE major_id = %s", (major_name, service_id))
         conn.commit()
-
-        logger.info(f"Service {service_id} updated to {major_name}")
         return {"success": True, "message": "Service updated successfully"}
     except HTTPException:
         raise
@@ -75,19 +61,14 @@ def update_service(conn: Connection, service_id: int, major_name: str):
         logger.error(f"update_service error: {e}")
         raise HTTPException(status_code=500, detail="Failed to update service")
 
-
-# ── Delete Service (Admin) ────────────────────────────────────
-def delete_service(conn: Connection, service_id: int):
+def delete_service(conn, service_id: int):
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT major_id FROM Maintenance_Major WHERE major_id = ?", service_id)
+        cursor.execute("SELECT major_id FROM maintenance_major WHERE major_id = %s", (service_id,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Service not found")
-
-        cursor.execute("DELETE FROM Maintenance_Major WHERE major_id = ?", service_id)
+        cursor.execute("DELETE FROM maintenance_major WHERE major_id = %s", (service_id,))
         conn.commit()
-
-        logger.info(f"Service {service_id} deleted")
         return {"success": True, "message": "Service deleted successfully"}
     except HTTPException:
         raise
@@ -97,34 +78,26 @@ def delete_service(conn: Connection, service_id: int):
 
 
 # ── Professionals ─────────────────────────────────────────────
-def get_professionals_by_category(conn: Connection, category: str):
+def get_professionals_by_category(conn, category: str):
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT
-                e.employee_id, e.f_name, e.l_name, e.job_type, e.rating,
-                e.home_service, e.night_service, e.is_emergency,
-                e.availability, e.profile_image, e.employee_di
-            FROM Maintenance_employee e
-            WHERE LOWER(e.job_type) = LOWER(?)
+            SELECT e.employee_id, e.f_name, e.l_name, e.job_type, e.rating,
+                   e.home_service, e.night_service, e.is_emergency,
+                   e.availability, e.profile_image, e.employee_di
+            FROM maintenance_employee e
+            WHERE LOWER(e.job_type) = LOWER(%s)
             ORDER BY e.rating DESC, e.is_emergency ASC
-        """, category)
+        """, (category,))
         rows = cursor.fetchall()
         if not rows:
             raise HTTPException(status_code=404, detail=f"No professionals found for category: {category}")
         return [
             {
-                "employee_id":   r.employee_id,
-                "f_name":        r.f_name,
-                "l_name":        r.l_name,
-                "job_type":      r.job_type,
-                "rating":        r.rating,
-                "home_service":  r.home_service,
-                "night_service": r.night_service,
-                "is_emergency":  bool(r.is_emergency),
-                "availability":  bool(r.availability),
-                "profile_image": r.profile_image,
-                "employee_di":   r.employee_di,
+                "employee_id":   r[0], "f_name": r[1], "l_name": r[2],
+                "job_type":      r[3], "rating": r[4], "home_service": r[5],
+                "night_service": r[6], "is_emergency": bool(r[7]),
+                "availability":  bool(r[8]), "profile_image": r[9], "employee_di": r[10],
             }
             for r in rows
         ]
@@ -135,90 +108,61 @@ def get_professionals_by_category(conn: Connection, category: str):
         raise HTTPException(status_code=500, detail="Failed to fetch professionals")
 
 
-# ── Create Booking ────────────────────────────────────────────
-def create_booking(conn: Connection, resident_id: int, data: dict):
+# ── Booking ───────────────────────────────────────────────────
+def create_booking(conn, resident_id: int, data: dict):
     try:
         cursor = conn.cursor()
-
-        cursor.execute(
-            "SELECT employee_id, availability FROM Maintenance_employee WHERE employee_id = ?",
-            data["employee_id"]
-        )
+        cursor.execute("SELECT employee_id, availability FROM maintenance_employee WHERE employee_id = %s", (data["employee_id"],))
         emp = cursor.fetchone()
         if not emp:
             raise HTTPException(status_code=404, detail="Professional not found")
-        if not emp.availability:
+        if not emp[1]:
             raise HTTPException(status_code=400, detail="Professional is not available right now")
 
         if data.get("payment_method_id"):
-            cursor.execute(
-                "SELECT payment_method_id FROM Payment_method WHERE payment_method_id = ?",
-                data["payment_method_id"]
-            )
+            cursor.execute("SELECT payment_method_id FROM payment_method WHERE payment_method_id = %s", (data["payment_method_id"],))
             if not cursor.fetchone():
                 raise HTTPException(status_code=404, detail="Payment method not found")
 
         cursor.execute("""
-            INSERT INTO Booking
-                (resident_id, employee_id, service_type, scheduled_date,
-                 is_emergency, notes, payment_method_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-            resident_id, data["employee_id"], data["service_type"],
-            data.get("scheduled_date"), 1 if data.get("is_emergency") else 0,
-            data.get("notes"), data.get("payment_method_id"),
-        )
+            INSERT INTO booking (resident_id, employee_id, service_type, scheduled_date, is_emergency, notes, payment_method_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (resident_id, data["employee_id"], data["service_type"],
+              data.get("scheduled_date"), 1 if data.get("is_emergency") else 0,
+              data.get("notes"), data.get("payment_method_id")))
 
-        cursor.execute(
-            "UPDATE Resident SET total_requests = total_requests + 1 WHERE resident_id = ?",
-            resident_id
-        )
+        cursor.execute("UPDATE resident SET total_requests = total_requests + 1 WHERE resident_id = %s", (resident_id,))
         conn.commit()
-
-        cursor.execute("SELECT TOP 1 booking_id FROM Booking WHERE resident_id = ? ORDER BY booking_id DESC", resident_id)
+        cursor.execute("SELECT booking_id FROM booking WHERE resident_id = %s ORDER BY booking_id DESC LIMIT 1", (resident_id,))
         new_booking = cursor.fetchone()
-
-        logger.info(f"Booking created: {new_booking.booking_id} for resident {resident_id}")
-        return {"success": True, "message": "Booking created successfully", "booking_id": new_booking.booking_id}
-
+        return {"success": True, "message": "Booking created successfully", "booking_id": new_booking[0]}
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"create_booking error: {e}")
         raise HTTPException(status_code=500, detail="Failed to create booking")
 
-
-# ── Get My Bookings ───────────────────────────────────────────
-def get_my_bookings(conn: Connection, resident_id: int):
+def get_my_bookings(conn, resident_id: int):
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT
-                b.booking_id, b.service_type, b.scheduled_date, b.is_emergency,
-                b.notes, b.status, b.created_at,
-                e.f_name AS emp_f_name, e.l_name AS emp_l_name,
-                e.job_type, e.rating AS emp_rating,
-                pm.method_name AS payment_method
-            FROM Booking b
-            LEFT JOIN Maintenance_employee e ON e.employee_id = b.employee_id
-            LEFT JOIN Payment_method pm ON pm.payment_method_id = b.payment_method_id
-            WHERE b.resident_id = ?
-            ORDER BY b.booking_id DESC
-        """, resident_id)
+            SELECT b.booking_id, b.service_type, b.scheduled_date, b.is_emergency,
+                   b.notes, b.status, b.created_at,
+                   e.f_name, e.l_name, e.job_type, e.rating, pm.method_name
+            FROM booking b
+            LEFT JOIN maintenance_employee e ON e.employee_id = b.employee_id
+            LEFT JOIN payment_method pm ON pm.payment_method_id = b.payment_method_id
+            WHERE b.resident_id = %s ORDER BY b.booking_id DESC
+        """, (resident_id,))
         rows = cursor.fetchall()
         return [
             {
-                "booking_id":     r.booking_id,
-                "service_type":   r.service_type,
-                "scheduled_date": str(r.scheduled_date) if r.scheduled_date else None,
-                "is_emergency":   bool(r.is_emergency),
-                "notes":          r.notes,
-                "status":         r.status,
-                "created_at":     str(r.created_at) if r.created_at else None,
-                "employee":       f"{r.emp_f_name} {r.emp_l_name}" if r.emp_f_name else None,
-                "job_type":       r.job_type,
-                "emp_rating":     r.emp_rating,
-                "payment_method": r.payment_method,
+                "booking_id": r[0], "service_type": r[1],
+                "scheduled_date": str(r[2]) if r[2] else None,
+                "is_emergency": bool(r[3]), "notes": r[4], "status": r[5],
+                "created_at": str(r[6]) if r[6] else None,
+                "employee": f"{r[7]} {r[8]}" if r[7] else None,
+                "job_type": r[9], "emp_rating": r[10], "payment_method": r[11],
             }
             for r in rows
         ]
@@ -226,39 +170,31 @@ def get_my_bookings(conn: Connection, resident_id: int):
         logger.error(f"get_my_bookings error: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch bookings")
 
-
-# ── Get All Bookings (Admin) ──────────────────────────────────
-def get_all_bookings(conn: Connection):
+def get_all_bookings(conn):
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT
-                b.booking_id, b.service_type, b.scheduled_date, b.is_emergency,
-                b.notes, b.status, b.created_at,
-                r.f_name AS res_f_name, r.l_name AS res_l_name, r.apartment_number,
-                e.f_name AS emp_f_name, e.l_name AS emp_l_name, e.job_type,
-                pm.method_name AS payment_method
-            FROM Booking b
-            LEFT JOIN Resident r ON r.resident_id = b.resident_id
-            LEFT JOIN Maintenance_employee e ON e.employee_id = b.employee_id
-            LEFT JOIN Payment_method pm ON pm.payment_method_id = b.payment_method_id
+            SELECT b.booking_id, b.service_type, b.scheduled_date, b.is_emergency,
+                   b.notes, b.status, b.created_at,
+                   r.f_name, r.l_name, r.apartment_number,
+                   e.f_name, e.l_name, e.job_type, pm.method_name
+            FROM booking b
+            LEFT JOIN resident r ON r.resident_id = b.resident_id
+            LEFT JOIN maintenance_employee e ON e.employee_id = b.employee_id
+            LEFT JOIN payment_method pm ON pm.payment_method_id = b.payment_method_id
             ORDER BY b.booking_id DESC
         """)
         rows = cursor.fetchall()
         return [
             {
-                "booking_id":       r.booking_id,
-                "service_type":     r.service_type,
-                "scheduled_date":   str(r.scheduled_date) if r.scheduled_date else None,
-                "is_emergency":     bool(r.is_emergency),
-                "notes":            r.notes,
-                "status":           r.status,
-                "created_at":       str(r.created_at) if r.created_at else None,
-                "resident":         f"{r.res_f_name} {r.res_l_name}" if r.res_f_name else None,
-                "apartment_number": r.apartment_number,
-                "employee":         f"{r.emp_f_name} {r.emp_l_name}" if r.emp_f_name else None,
-                "job_type":         r.job_type,
-                "payment_method":   r.payment_method,
+                "booking_id": r[0], "service_type": r[1],
+                "scheduled_date": str(r[2]) if r[2] else None,
+                "is_emergency": bool(r[3]), "notes": r[4], "status": r[5],
+                "created_at": str(r[6]) if r[6] else None,
+                "resident": f"{r[7]} {r[8]}" if r[7] else None,
+                "apartment_number": r[9],
+                "employee": f"{r[10]} {r[11]}" if r[10] else None,
+                "job_type": r[12], "payment_method": r[13],
             }
             for r in rows
         ]
@@ -266,23 +202,17 @@ def get_all_bookings(conn: Connection):
         logger.error(f"get_all_bookings error: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch bookings")
 
-
-# ── Update Booking Status (Admin) ─────────────────────────────
-def update_booking_status(conn: Connection, booking_id: int, status: str):
+def update_booking_status(conn, booking_id: int, status: str):
     try:
         valid_statuses = ["pending", "confirmed", "in_progress", "completed", "cancelled"]
         if status not in valid_statuses:
             raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
-
         cursor = conn.cursor()
-        cursor.execute("SELECT booking_id FROM Booking WHERE booking_id = ?", booking_id)
+        cursor.execute("SELECT booking_id FROM booking WHERE booking_id = %s", (booking_id,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Booking not found")
-
-        cursor.execute("UPDATE Booking SET status = ? WHERE booking_id = ?", status, booking_id)
+        cursor.execute("UPDATE booking SET status = %s WHERE booking_id = %s", (status, booking_id))
         conn.commit()
-
-        logger.info(f"Booking {booking_id} status updated to {status}")
         return {"success": True, "message": f"Booking status updated to '{status}'"}
     except HTTPException:
         raise
@@ -290,25 +220,17 @@ def update_booking_status(conn: Connection, booking_id: int, status: str):
         logger.error(f"update_booking_status error: {e}")
         raise HTTPException(status_code=500, detail="Failed to update booking status")
 
-
-# ── Cancel Booking ────────────────────────────────────────────
-def cancel_booking(conn: Connection, resident_id: int, booking_id: int):
+def cancel_booking(conn, resident_id: int, booking_id: int):
     try:
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT booking_id, status FROM Booking WHERE booking_id = ? AND resident_id = ?",
-            booking_id, resident_id
-        )
+        cursor.execute("SELECT booking_id, status FROM booking WHERE booking_id = %s AND resident_id = %s", (booking_id, resident_id))
         booking = cursor.fetchone()
         if not booking:
             raise HTTPException(status_code=404, detail="Booking not found or not yours")
-        if booking.status in ["completed", "cancelled"]:
-            raise HTTPException(status_code=400, detail=f"Cannot cancel a {booking.status} booking")
-
-        cursor.execute("UPDATE Booking SET status = 'cancelled' WHERE booking_id = ?", booking_id)
+        if booking[1] in ["completed", "cancelled"]:
+            raise HTTPException(status_code=400, detail=f"Cannot cancel a {booking[1]} booking")
+        cursor.execute("UPDATE booking SET status = 'cancelled' WHERE booking_id = %s", (booking_id,))
         conn.commit()
-
-        logger.info(f"Booking {booking_id} cancelled by resident {resident_id}")
         return {"success": True, "message": "Booking cancelled successfully"}
     except HTTPException:
         raise
@@ -318,36 +240,26 @@ def cancel_booking(conn: Connection, resident_id: int, booking_id: int):
 
 
 # ── User Profile ──────────────────────────────────────────────
-def get_user_profile(conn: Connection, username: str):
+def get_user_profile(conn, username: str):
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT
-                l.username, l.email, l.user_role,
-                r.f_name, r.l_name,
-                r.resident_phone_num AS phone,
-                r.area, r.apartment_number, r.unit_number,
-                r.joining_date, r.total_requests
-            FROM Login l
-            LEFT JOIN Resident r ON r.email = l.email
-            WHERE l.username = ?
-        """, username)
+            SELECT l.username, l.email, l.user_role,
+                   r.f_name, r.l_name, r.resident_phone_num,
+                   r.area, r.apartment_number, r.unit_number,
+                   r.joining_date, r.total_requests
+            FROM login l
+            LEFT JOIN resident r ON r.email = l.email
+            WHERE l.username = %s
+        """, (username,))
         row = cursor.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="User not found")
-
         return {
-            "username":         row.username,
-            "email":            row.email,
-            "role":             row.user_role,
-            "f_name":           row.f_name,
-            "l_name":           row.l_name,
-            "phone":            row.phone,
-            "area":             row.area,
-            "apartment_number": row.apartment_number,
-            "unit_number":      row.unit_number,
-            "joining_date":     str(row.joining_date) if row.joining_date else None,
-            "total_requests":   row.total_requests,
+            "username": row[0], "email": row[1], "role": row[2],
+            "f_name": row[3], "l_name": row[4], "phone": row[5],
+            "area": row[6], "apartment_number": row[7], "unit_number": row[8],
+            "joining_date": str(row[9]) if row[9] else None, "total_requests": row[10],
         }
     except HTTPException:
         raise
